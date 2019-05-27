@@ -1,0 +1,6 @@
+{
+  "terminal.integrated.env.osx": {
+    "PATH": "/Users/daniele/.platformio/penv/bin:/Users/daniele/.platformio/penv:/Users/daniele/.nvm/versions/node/v10.15.0/bin:/Users/daniele/bin:/usr/local/bin:/opt/local/bin:/Library/Frameworks/Python.framework/Versions/3.6/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/X11/bin:/Applications/Postgres.app/Contents/Versions/latest/bin",
+    "PLATFORMIO_CALLER": "vscode"
+  }
+}
