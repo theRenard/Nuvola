@@ -2,9 +2,16 @@
 #include "avdweb_Switch.h"
 #include <NeoPixelBus.h>
 
+// millis
+unsigned long startMillis;
+unsigned long currentMillis;
+const unsigned long period = 1000;
+
 // multi response button
 const byte multiresponseButtonpin = D2;
 int ledState = 0;
+int pixels = 1;
+int pushed = 0;
 
 Switch multiresponseButton = Switch(multiresponseButtonpin);
 
@@ -28,6 +35,11 @@ HslColor hslBlue(blue);
 HslColor hslWhite(white);
 HslColor hslBlack(black);
 
+void lightUp() {
+    for (int i = 0; i <= pixels; i++) {
+        strip.SetPixelColor(pixels, hslRed);
+    }
+}
 
 void setup()
 {
@@ -51,11 +63,33 @@ void setup()
 void loop() {
 
   multiresponseButton.poll();
-  if(multiresponseButton.longPress()) Serial.println("multiresponseButton longPress");
-  if(multiresponseButton.doubleClick()) Serial.println("multiresponseButton doubleClick");
-  if(multiresponseButton.singleClick()) Serial.println("multiresponseButton singleClick");
+
+  if (multiresponseButton.pushed()) {
+
+    Serial.println("multiresponseButton pushed");
+    startMillis = millis();
+    pushed = 1;
+
+  }
+
+  if (multiresponseButton.released()) {
+
+    Serial.println("multiresponseButton released");
+    pushed = 0;
+
+  }
+
+  // get the current "time" (actually the number of milliseconds since the program started)
+  currentMillis = millis();
+
+  //test whether the period has elapsed
+  if (currentMillis - startMillis >= period && pushed) {
+    Serial.print("now");
+    startMillis = currentMillis;  //IMPORTANT to save the start time of the current LED state.
+  }
 
   if ( multiresponseButton.singleClick() ) {
+    Serial.println("multiresponseButton click");
      if (ledState == 1) {
         // set the colors,
         strip.SetPixelColor(0, hslRed);
@@ -74,8 +108,5 @@ void loop() {
         ledState = 1;
       }
   }
-
-
-
 
 }
