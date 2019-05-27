@@ -1,6 +1,14 @@
-
+#include <Arduino.h>
+#include "avdweb_Switch.h"
 #include <NeoPixelBus.h>
 
+// multi response button
+const byte multiresponseButtonpin = D2;
+int ledState = 0;
+
+Switch multiresponseButton = Switch(multiresponseButtonpin);
+
+// neopixel
 const uint16_t PixelCount = 10; // this example assumes 4 pixels, making it smaller will cause a failure
 const uint8_t PixelPin = 20;  // make sure to set this to the correct pin, ignored for Esp8266
 
@@ -40,58 +48,34 @@ void setup()
 }
 
 
-void loop()
-{
-    delay(1000);
+void loop() {
 
-    Serial.println("Colors R, G, B, W...");
+  multiresponseButton.poll();
+  if(multiresponseButton.longPress()) Serial.println("multiresponseButton longPress");
+  if(multiresponseButton.doubleClick()) Serial.println("multiresponseButton doubleClick");
+  if(multiresponseButton.singleClick()) Serial.println("multiresponseButton singleClick");
 
-    // set the colors,
-    // if they don't match in order, you need to use NeoGrbFeature feature
-    strip.SetPixelColor(0, red);
-    strip.SetPixelColor(1, green);
-    strip.SetPixelColor(2, blue);
-    strip.SetPixelColor(3, white);
-    // the following line demonstrates rgbw color support
-    // if the NeoPixels are rgbw types the following line will compile
-    // if the NeoPixels are anything else, the following line will give an error
-    //strip.SetPixelColor(3, RgbwColor(colorSaturation));
-    strip.Show();
-
-
-    delay(1000);
-
-    Serial.println("Off ...");
-
-    // turn off the pixels
-    strip.SetPixelColor(0, black);
-    strip.SetPixelColor(1, black);
-    strip.SetPixelColor(2, black);
-    strip.SetPixelColor(3, black);
-    strip.Show();
-
-    delay(1000);
-
-    Serial.println("HSL Colors R, G, B, W...");
-
-    // set the colors,
-    // if they don't match in order, you may need to use NeoGrbFeature feature
-    strip.SetPixelColor(0, hslRed);
-    strip.SetPixelColor(1, hslGreen);
-    strip.SetPixelColor(2, hslBlue);
-    strip.SetPixelColor(3, hslWhite);
-    strip.Show();
+  if ( multiresponseButton.singleClick() ) {
+     if (ledState == 1) {
+        // set the colors,
+        strip.SetPixelColor(0, hslRed);
+        strip.SetPixelColor(1, hslGreen);
+        strip.SetPixelColor(2, hslBlue);
+        strip.SetPixelColor(3, hslWhite);
+        strip.Show();
+        ledState = 0;
+      } else {
+        // turn off the pixels
+        strip.SetPixelColor(0, hslBlack);
+        strip.SetPixelColor(1, hslBlack);
+        strip.SetPixelColor(2, hslBlack);
+        strip.SetPixelColor(3, hslBlack);
+        strip.Show();
+        ledState = 1;
+      }
+  }
 
 
-    delay(1000);
 
-    Serial.println("Off again...");
-
-    // turn off the pixels
-    strip.SetPixelColor(0, hslBlack);
-    strip.SetPixelColor(1, hslBlack);
-    strip.SetPixelColor(2, hslBlack);
-    strip.SetPixelColor(3, hslBlack);
-    strip.Show();
 
 }
