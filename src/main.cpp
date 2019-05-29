@@ -8,8 +8,13 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-// MQTT
+// payload { On: false, Brightness: 0, Hue: 0, Saturation: 0 }
 
+// LIGHT JSON OBJECT
+const size_t capacity = JSON_OBJECT_SIZE(4);
+DynamicJsonDocument nuvolaPayload(capacity);
+
+// MQTT
 WiFiClient espClient;
 PubSubClient MQTTclient(espClient);
 
@@ -30,12 +35,16 @@ void MQTTcallback(char* topic, byte* payload, unsigned int length) {
 }
 
 boolean reconnect() {
+
   if (MQTTclient.connect("Nuvola")) {
+
     Serial.println("MQTT is connected...");
-    // Once connected, publish an announcement...
-    MQTTclient.publish("outTopic","hello world");
-    // ... and resubscribe
     MQTTclient.subscribe("inTopic");
+
+    // publish nuvola Light Payload
+    char buffer[512];
+    size_t n = serializeJson(nuvolaPayload, buffer);
+    MQTTclient.publish("outTopic",buffer, n);
   }
   return MQTTclient.connected();
 }
@@ -78,14 +87,21 @@ HslColor hslBlue(blue);
 HslColor hslWhite(white);
 HslColor hslBlack(black);
 
-void setup()
-{
+void setup() {
+
     Serial.begin(115200);
     while (!Serial); // wait for serial attach
 
-    Serial.println();
-    Serial.println("Initializing... Nuvola");
+    nuvolaPayload["On"] = false;
+    nuvolaPayload["Brightness"] = 0;
+    nuvolaPayload["Hue"] = 0;
+    nuvolaPayload["Saturation"] = 0;
+
     Serial.flush();
+
+    Serial.println("Initializing... Nuvola");
+    Serial.println();
+    serializeJson(nuvolaPayload, Serial);
 
     WiFiManager wifiManager;
 
