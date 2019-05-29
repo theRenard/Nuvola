@@ -5,12 +5,12 @@
 // millis
 unsigned long startMillis;
 unsigned long currentMillis;
-const unsigned long period = 1000;
+const unsigned long period = 500;
 
 // multi response button
 const byte multiresponseButtonpin = D2;
 int ledState = 0;
-int pixels = 1;
+int activePixels = 0;
 int pushed = 0;
 
 Switch multiresponseButton = Switch(multiresponseButtonpin);
@@ -34,12 +34,6 @@ HslColor hslGreen(green);
 HslColor hslBlue(blue);
 HslColor hslWhite(white);
 HslColor hslBlack(black);
-
-void lightUp() {
-    for (int i = 0; i <= pixels; i++) {
-        strip.SetPixelColor(pixels, hslRed);
-    }
-}
 
 void setup()
 {
@@ -84,20 +78,38 @@ void loop() {
 
   //test whether the period has elapsed
   if (currentMillis - startMillis >= period && pushed) {
+
     Serial.print("now");
+
+    if (activePixels <= 10) {
+      activePixels += 2;
+    } else {
+      activePixels = 0;
+    }
+
+    for (int i = 0; i <= PixelCount; i++) {
+      const HslColor color = (i < activePixels) ? hslWhite : hslBlack;
+        strip.SetPixelColor(i, color);
+    }
+
+    strip.Show();
+
     startMillis = currentMillis;  //IMPORTANT to save the start time of the current LED state.
   }
 
   if ( multiresponseButton.singleClick() ) {
+
     Serial.println("multiresponseButton click");
-     if (ledState == 1) {
+
+     if (ledState == 0) {
         // set the colors,
         strip.SetPixelColor(0, hslRed);
         strip.SetPixelColor(1, hslGreen);
         strip.SetPixelColor(2, hslBlue);
         strip.SetPixelColor(3, hslWhite);
         strip.Show();
-        ledState = 0;
+        ledState = 1;
+        activePixels = 0;
       } else {
         // turn off the pixels
         strip.SetPixelColor(0, hslBlack);
@@ -105,8 +117,7 @@ void loop() {
         strip.SetPixelColor(2, hslBlack);
         strip.SetPixelColor(3, hslBlack);
         strip.Show();
-        ledState = 1;
+        ledState = 0;
       }
   }
-
 }
