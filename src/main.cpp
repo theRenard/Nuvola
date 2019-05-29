@@ -1,17 +1,60 @@
 #include <Arduino.h>
-#include "avdweb_Switch.h"
+#include <avdweb_Switch.h>
 #include <NeoPixelBus.h>
+#include <ESP8266WiFi.h>
+#include <DNSServer.h>
+#include <ESP8266WebServer.h>
+#include <WiFiManager.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
+
+// MQTT
+
+WiFiClient espClient;
+PubSubClient MQTTclient(espClient);
+
+#define mqtt_server "homebridge"
+
+// buffer MQTT
+long lastReconnectAttempt;
+
+void MQTTcallback(char* topic, byte* payload, unsigned int length) {
+
+  StaticJsonDocument<404> doc;
+  deserializeJson(doc, payload, length);
+
+  const char* value = doc["key"];
+  Serial.println(value);
+  Serial.print("payload");
+
+}
+
+boolean reconnect() {
+  if (MQTTclient.connect("Nuvola")) {
+    Serial.println("MQTT is connected...");
+    // Once connected, publish an announcement...
+    MQTTclient.publish("outTopic","hello world");
+    // ... and resubscribe
+    MQTTclient.subscribe("inTopic");
+  }
+  return MQTTclient.connected();
+}
+
 
 // millis
-unsigned long startMillis;
-unsigned long currentMillis;
-const unsigned long period = 500;
+unsigned long startLongPressMillis;
+unsigned long currentLongPressMillis;
+const unsigned long longPressDelay = 500;
+
+unsigned long startMQTTmillis;
+unsigned long currentMQTTmillis;
+const unsigned long MQTTdelay = 500;
 
 // multi response button
 const byte multiresponseButtonpin = D2;
 int ledState = 0;
 int activePixels = 0;
-int pushed = 0;
+bool pushed;
 
 Switch multiresponseButton = Switch(multiresponseButtonpin);
 
@@ -41,27 +84,60 @@ void setup()
     while (!Serial); // wait for serial attach
 
     Serial.println();
-    Serial.println("Initializing...");
+    Serial.println("Initializing... Nuvola");
     Serial.flush();
+
+    WiFiManager wifiManager;
+
+    //reset saved settings
+    //wifiManager.resetSettings();
+
+    wifiManager.autoConnect("Nuvola");
+
+    Serial.println("Nuvola connected to WiFi :)");
+
+    // this sets the MQTT client and its callback
+    Serial.println("Setting MQTT client...");
+    MQTTclient.setServer(mqtt_server, 1883);
+    MQTTclient.setCallback(MQTTcallback);
+    startMQTTmillis = 0;
 
     // this resets all the neopixels to an off state
     strip.Begin();
     strip.Show();
 
-
     Serial.println();
     Serial.println("Running...");
+
+    pushed = false;
 }
 
-
 void loop() {
+
+  if (!MQTTclient.connected()) {
+
+    Serial.println("MQTT not connected...");
+    currentMQTTmillis = millis();
+
+    if (currentMQTTmillis - startMQTTmillis > MQTTdelay) {
+
+      startMQTTmillis = currentMQTTmillis;
+      // Attempt to reconnect
+      if (reconnect()) {
+        startMQTTmillis = 0;
+      }
+    }
+  } else {
+    // Client connected
+    MQTTclient.loop();
+  }
 
   multiresponseButton.poll();
 
   if (multiresponseButton.pushed()) {
 
     Serial.println("multiresponseButton pushed");
-    startMillis = millis();
+    startLongPressMillis = millis();
     pushed = 1;
 
   }
@@ -74,18 +150,20 @@ void loop() {
   }
 
   // get the current "time" (actually the number of milliseconds since the program started)
-  currentMillis = millis();
+  currentLongPressMillis = millis();
 
-  //test whether the period has elapsed
-  if (currentMillis - startMillis >= period && pushed) {
+  //test whether the longPressDelay has elapsed
+  if (currentLongPressMillis - startLongPressMillis >= longPressDelay && pushed) {
 
-    Serial.print("now");
 
     if (activePixels <= 10) {
       activePixels += 2;
     } else {
       activePixels = 0;
     }
+
+    Serial.println(activePixels);
+    Serial.print(" Activated");
 
     for (int i = 0; i <= PixelCount; i++) {
       const HslColor color = (i < activePixels) ? hslWhite : hslBlack;
@@ -94,30 +172,34 @@ void loop() {
 
     strip.Show();
 
-    startMillis = currentMillis;  //IMPORTANT to save the start time of the current LED state.
+    startLongPressMillis = currentLongPressMillis;  //IMPORTANT to save the start time of the current LED state.
   }
 
   if ( multiresponseButton.singleClick() ) {
 
     Serial.println("multiresponseButton click");
 
-     if (ledState == 0) {
+     if (!ledState) {
+
         // set the colors,
         strip.SetPixelColor(0, hslRed);
         strip.SetPixelColor(1, hslGreen);
         strip.SetPixelColor(2, hslBlue);
         strip.SetPixelColor(3, hslWhite);
         strip.Show();
-        ledState = 1;
+        ledState = true;
         activePixels = 0;
+
       } else {
+
         // turn off the pixels
         strip.SetPixelColor(0, hslBlack);
         strip.SetPixelColor(1, hslBlack);
         strip.SetPixelColor(2, hslBlack);
         strip.SetPixelColor(3, hslBlack);
         strip.Show();
-        ledState = 0;
+        ledState = false;
       }
   }
 }
+
