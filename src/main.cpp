@@ -14,6 +14,26 @@
 const size_t capacity = JSON_OBJECT_SIZE(4);
 DynamicJsonDocument nuvolaPayload(capacity);
 
+// neopixel
+const uint16_t PixelCount = 10; // this example assumes 4 pixels, making it smaller will cause a failure
+const uint8_t PixelPin = 20;  // make sure to set this to the correct pin, ignored for Esp8266
+
+#define colorSaturation 128
+
+NeoPixelBus<NeoGrbFeature, NeoEsp8266Dma800KbpsMethod> strip(PixelCount, PixelPin);
+
+RgbColor red(colorSaturation, 0, 0);
+RgbColor green(0, colorSaturation, 0);
+RgbColor blue(0, 0, colorSaturation);
+RgbColor white(colorSaturation);
+RgbColor black(0);
+
+HslColor hslRed(red);
+HslColor hslGreen(green);
+HslColor hslBlue(blue);
+HslColor hslWhite(white);
+HslColor hslBlack(black);
+
 // MQTT
 WiFiClient espClient;
 PubSubClient MQTTclient(espClient);
@@ -25,12 +45,25 @@ long lastReconnectAttempt;
 
 void MQTTcallback(char* topic, byte* payload, unsigned int length) {
 
-  StaticJsonDocument<404> doc;
-  deserializeJson(doc, payload, length);
+  deserializeJson(nuvolaPayload, payload, length);
 
-  const char* value = doc["key"];
-  Serial.println(value);
-  Serial.print("payload");
+  bool On = nuvolaPayload["On"]; // false
+  float Brightness = nuvolaPayload["Brightness"]; // 0.1
+  float Hue = nuvolaPayload["Hue"]; // 0.1
+  float Saturation = nuvolaPayload["Saturation"]; // 0.1
+
+  Serial.println("payload");
+  Serial.println(On);
+  Serial.println(Brightness);
+  Serial.println(Hue);
+  Serial.println(Saturation);
+
+  HsbColor hsbColor(Hue, Saturation, Brightness);
+
+  strip.SetPixelColor(0, hsbColor);
+  strip.SetPixelColor(1, hsbColor);
+  strip.SetPixelColor(2, hsbColor);
+  strip.Show();
 
 }
 
@@ -66,26 +99,6 @@ int activePixels = 0;
 bool pushed;
 
 Switch multiresponseButton = Switch(multiresponseButtonpin);
-
-// neopixel
-const uint16_t PixelCount = 10; // this example assumes 4 pixels, making it smaller will cause a failure
-const uint8_t PixelPin = 20;  // make sure to set this to the correct pin, ignored for Esp8266
-
-#define colorSaturation 128
-
-NeoPixelBus<NeoGrbFeature, NeoEsp8266Dma800KbpsMethod> strip(PixelCount, PixelPin);
-
-RgbColor red(colorSaturation, 0, 0);
-RgbColor green(0, colorSaturation, 0);
-RgbColor blue(0, 0, colorSaturation);
-RgbColor white(colorSaturation);
-RgbColor black(0);
-
-HslColor hslRed(red);
-HslColor hslGreen(green);
-HslColor hslBlue(blue);
-HslColor hslWhite(white);
-HslColor hslBlack(black);
 
 void setup() {
 
