@@ -8,6 +8,21 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
+
+// millis
+unsigned long startLongPressMillis;
+unsigned long currentLongPressMillis;
+const unsigned long longPressDelay = 500;
+
+unsigned long startMQTTmillis;
+unsigned long currentMQTTmillis;
+const unsigned long MQTTdelay = 500;
+
+// multi response button
+const byte multiresponseButtonpin = D2;
+int longPressActivePixels = 0;
+bool pushed;
+
 // payload { On: false, Brightness: 0, Hue: 0, Saturation: 0 }
 
 // LIGHT JSON OBJECT
@@ -22,17 +37,7 @@ const uint8_t PixelPin = 20;  // make sure to set this to the correct pin, ignor
 
 NeoPixelBus<NeoGrbFeature, NeoEsp8266Dma800KbpsMethod> strip(PixelCount, PixelPin);
 
-RgbColor red(colorSaturation, 0, 0);
-RgbColor green(0, colorSaturation, 0);
-RgbColor blue(0, 0, colorSaturation);
-RgbColor white(colorSaturation);
-RgbColor black(0);
-
-HslColor hslRed(red);
-HslColor hslGreen(green);
-HslColor hslBlue(blue);
-HslColor hslWhite(white);
-HslColor hslBlack(black);
+HsbColor hsbBlack(0, 0, 0);
 
 // MQTT
 WiFiClient espClient;
@@ -40,31 +45,43 @@ PubSubClient MQTTclient(espClient);
 
 #define mqtt_server "homebridge"
 
-// buffer MQTT
-long lastReconnectAttempt;
+void activateStrip(int activePixels = PixelCount) {
 
-void MQTTcallback(char* topic, byte* payload, unsigned int length) {
-
-  deserializeJson(nuvolaPayload, payload, length);
-
-  bool On = nuvolaPayload["On"]; // false
-  float Brightness = nuvolaPayload["Brightness"]; // 0.1
-  float Hue = nuvolaPayload["Hue"]; // 0.1
-  float Saturation = nuvolaPayload["Saturation"]; // 0.1
+  bool On = nuvolaPayload["On"]; // ex: false
+  float Brightness = nuvolaPayload["Brightness"]; // ex: 0.1
+  float Hue = nuvolaPayload["Hue"]; // ex: 0.1
+  float Saturation = nuvolaPayload["Saturation"]; // ex: 0.1
 
   Serial.println("payload");
+  Serial.print("On ");
   Serial.println(On);
+  Serial.print("Brightness ");
   Serial.println(Brightness);
+  Serial.print("Hue ");
   Serial.println(Hue);
+  Serial.print("Saturation ");
   Serial.println(Saturation);
 
   HsbColor hsbColor(Hue, Saturation, Brightness);
 
-  strip.SetPixelColor(0, hsbColor);
-  strip.SetPixelColor(1, hsbColor);
-  strip.SetPixelColor(2, hsbColor);
-  strip.Show();
+  for (int i = 0; i <= PixelCount; i++) {
+    const HsbColor color = (i < activePixels) ? hsbColor : hsbBlack;
+    strip.SetPixelColor(i, color);
+  }
 
+  strip.Show();
+}
+
+void sendNuvolaStatusOverMQTT() {
+    // publish nuvola Light Payload
+    char buffer[512];
+    size_t n = serializeJson(nuvolaPayload, buffer);
+    MQTTclient.publish("outTopic", buffer, n);
+}
+
+void MQTTcallback(char* topic, byte* payload, unsigned int length) {
+  deserializeJson(nuvolaPayload, payload, length);
+  activateStrip();
 }
 
 boolean reconnect() {
@@ -77,26 +94,10 @@ boolean reconnect() {
     // publish nuvola Light Payload
     char buffer[512];
     size_t n = serializeJson(nuvolaPayload, buffer);
-    MQTTclient.publish("outTopic",buffer, n);
+    MQTTclient.publish("outTopic", buffer, n);
   }
   return MQTTclient.connected();
 }
-
-
-// millis
-unsigned long startLongPressMillis;
-unsigned long currentLongPressMillis;
-const unsigned long longPressDelay = 500;
-
-unsigned long startMQTTmillis;
-unsigned long currentMQTTmillis;
-const unsigned long MQTTdelay = 500;
-
-// multi response button
-const byte multiresponseButtonpin = D2;
-int ledState = 0;
-int activePixels = 0;
-bool pushed;
 
 Switch multiresponseButton = Switch(multiresponseButtonpin);
 
@@ -105,6 +106,7 @@ void setup() {
     Serial.begin(115200);
     while (!Serial); // wait for serial attach
 
+    // init strip obj
     nuvolaPayload["On"] = false;
     nuvolaPayload["Brightness"] = 0;
     nuvolaPayload["Hue"] = 0;
@@ -165,7 +167,7 @@ void loop() {
 
   if (multiresponseButton.pushed()) {
 
-    Serial.println("multiresponseButton pushed");
+    Serial.println("Pushed");
     startLongPressMillis = millis();
     pushed = 1;
 
@@ -173,7 +175,7 @@ void loop() {
 
   if (multiresponseButton.released()) {
 
-    Serial.println("multiresponseButton released");
+    Serial.println("Released");
     pushed = 0;
 
   }
@@ -185,50 +187,62 @@ void loop() {
   if (currentLongPressMillis - startLongPressMillis >= longPressDelay && pushed) {
 
 
-    if (activePixels <= 10) {
-      activePixels += 2;
+    if (longPressActivePixels <= PixelCount) {
+
+      longPressActivePixels += 2;
+
+      nuvolaPayload["On"] = true;
+      nuvolaPayload["Brightness"] = 1;
+      nuvolaPayload["Hue"] = 1;
+      nuvolaPayload["Saturation"] = 1;
+
     } else {
-      activePixels = 0;
+
+      longPressActivePixels = 0;
+
+      nuvolaPayload["On"] = false;
+      nuvolaPayload["Brightness"] = 0;
+      nuvolaPayload["Hue"] = 0;
+      nuvolaPayload["Saturation"] = 0;
+
     }
 
-    Serial.println(activePixels);
-    Serial.print(" Activated");
+    Serial.print("Activated ");
+    Serial.println(longPressActivePixels);
 
-    for (int i = 0; i <= PixelCount; i++) {
-      const HslColor color = (i < activePixels) ? hslWhite : hslBlack;
-        strip.SetPixelColor(i, color);
-    }
-
-    strip.Show();
+    activateStrip(longPressActivePixels);
+    sendNuvolaStatusOverMQTT();
 
     startLongPressMillis = currentLongPressMillis;  //IMPORTANT to save the start time of the current LED state.
   }
 
   if ( multiresponseButton.singleClick() ) {
 
-    Serial.println("multiresponseButton click");
+    Serial.println("Click");
 
-     if (!ledState) {
+    longPressActivePixels = 0;
 
-        // set the colors,
-        strip.SetPixelColor(0, hslRed);
-        strip.SetPixelColor(1, hslGreen);
-        strip.SetPixelColor(2, hslBlue);
-        strip.SetPixelColor(3, hslWhite);
-        strip.Show();
-        ledState = true;
-        activePixels = 0;
+    if (nuvolaPayload["On"]) {
 
-      } else {
+      nuvolaPayload["On"] = false;
+      nuvolaPayload["Brightness"] = 0;
+      nuvolaPayload["Hue"] = 0;
+      nuvolaPayload["Saturation"] = 0;
 
-        // turn off the pixels
-        strip.SetPixelColor(0, hslBlack);
-        strip.SetPixelColor(1, hslBlack);
-        strip.SetPixelColor(2, hslBlack);
-        strip.SetPixelColor(3, hslBlack);
-        strip.Show();
-        ledState = false;
-      }
+      activateStrip(10);
+
+    } else {
+
+      nuvolaPayload["On"] = true;
+      nuvolaPayload["Brightness"] = 1;
+      nuvolaPayload["Hue"] = 0.5;
+      nuvolaPayload["Saturation"] = 1;
+
+      activateStrip(10);
+    }
+
+    sendNuvolaStatusOverMQTT();
+
   }
 }
 
