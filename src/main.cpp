@@ -28,6 +28,7 @@ bool pushed;
 // LIGHT JSON OBJECT
 const size_t capacity = JSON_OBJECT_SIZE(4);
 DynamicJsonDocument nuvolaPayload(capacity);
+DynamicJsonDocument MQTTpayload(capacity);
 
 // neopixel
 const uint16_t PixelCount = 10; // this example assumes 4 pixels, making it smaller will cause a failure
@@ -80,7 +81,13 @@ void sendNuvolaStatusOverMQTT() {
 }
 
 void MQTTcallback(char* topic, byte* payload, unsigned int length) {
-  deserializeJson(nuvolaPayload, payload, length);
+  deserializeJson(MQTTpayload, payload, length);
+
+  nuvolaPayload["On"] = MQTTpayload["On"];
+  nuvolaPayload["Brightness"] = MQTTpayload["Brightness"];
+  nuvolaPayload["Hue"] = MQTTpayload["Hue"];
+  nuvolaPayload["Saturation"] = MQTTpayload["Saturation"];
+
   activateStrip();
 }
 
