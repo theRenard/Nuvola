@@ -28,7 +28,8 @@ bool pushed;
 // LIGHT JSON OBJECT
 const size_t capacity = JSON_OBJECT_SIZE(4);
 DynamicJsonDocument nuvolaPayload(capacity);
-DynamicJsonDocument MQTTpayload(capacity);
+DynamicJsonDocument MQTTSubPayload(capacity);
+DynamicJsonDocument MQTTPubPayload(capacity);
 
 // neopixel
 const uint16_t PixelCount = 10; // this example assumes 4 pixels, making it smaller will cause a failure
@@ -75,18 +76,29 @@ void activateStrip(int activePixels = PixelCount) {
 
 void sendNuvolaStatusOverMQTT() {
     // publish nuvola Light Payload
+
+    float hue = nuvolaPayload["Hue"];
+
+    MQTTPubPayload["On"] = nuvolaPayload["On"];
+    MQTTPubPayload["Brightness"] = nuvolaPayload["Brightness"];
+    MQTTPubPayload["Hue"] = hue * 360;
+    MQTTPubPayload["Saturation"] = nuvolaPayload["Saturation"];
+
     char buffer[512];
-    size_t n = serializeJson(nuvolaPayload, buffer);
+    size_t n = serializeJson(MQTTPubPayload, buffer);
     MQTTclient.publish("outTopic", buffer, n);
 }
 
 void MQTTcallback(char* topic, byte* payload, unsigned int length) {
-  deserializeJson(MQTTpayload, payload, length);
 
-  nuvolaPayload["On"] = MQTTpayload["On"];
-  nuvolaPayload["Brightness"] = MQTTpayload["Brightness"];
-  nuvolaPayload["Hue"] = MQTTpayload["Hue"];
-  nuvolaPayload["Saturation"] = MQTTpayload["Saturation"];
+  deserializeJson(MQTTSubPayload, payload, length);
+
+  float hue = MQTTSubPayload["Hue"];
+
+  nuvolaPayload["On"] = MQTTSubPayload["On"];
+  nuvolaPayload["Brightness"] = MQTTSubPayload["Brightness"];
+  nuvolaPayload["Hue"] = hue / 360;
+  nuvolaPayload["Saturation"] = MQTTSubPayload["Saturation"];
 
   activateStrip();
 }
