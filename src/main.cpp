@@ -8,7 +8,6 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-
 // millis
 unsigned long startLongPressMillis;
 unsigned long currentLongPressMillis;
@@ -16,7 +15,14 @@ const unsigned long longPressDelay = 500;
 
 unsigned long startMQTTmillis;
 unsigned long currentMQTTmillis;
-const unsigned long MQTTdelay = 500;
+const unsigned long MQTTdelay = 5000;
+
+// bulb characteristics
+
+bool On;
+float Hue;
+float Brightness;
+float Saturation;
 
 // multi response button
 const byte multiresponseButtonpin = D2;
@@ -27,9 +33,6 @@ bool pushed;
 
 // LIGHT JSON OBJECT
 const size_t capacity = JSON_OBJECT_SIZE(4);
-DynamicJsonDocument nuvolaPayload(capacity);
-DynamicJsonDocument MQTTSubPayload(capacity);
-DynamicJsonDocument MQTTPubPayload(capacity);
 
 // neopixel
 const uint16_t PixelCount = 10; // this example assumes 4 pixels, making it smaller will cause a failure
@@ -47,14 +50,10 @@ PubSubClient MQTTclient(espClient);
 
 #define mqtt_server "homebridge"
 
-void activateStrip(int activePixels = PixelCount) {
+void activateStrip() {
 
-  bool On = nuvolaPayload["On"]; // ex: false
-  float Brightness = nuvolaPayload["Brightness"]; // ex: 0.1
-  float Hue = nuvolaPayload["Hue"]; // ex: 0.1
-  float Saturation = nuvolaPayload["Saturation"]; // ex: 0.1
-
-  Serial.println("payload");
+  Serial.println();
+  Serial.println("Nuvola set new values");
   Serial.print("On ");
   Serial.println(On);
   Serial.print("Brightness ");
@@ -67,7 +66,7 @@ void activateStrip(int activePixels = PixelCount) {
   HsbColor hsbColor(Hue, Saturation, Brightness);
 
   for (int i = 0; i <= PixelCount; i++) {
-    const HsbColor color = (i < activePixels) ? hsbColor : hsbBlack;
+    const HsbColor color = (i < longPressActivePixels && On) ? hsbColor : hsbBlack;
     strip.SetPixelColor(i, color);
   }
 
@@ -77,28 +76,50 @@ void activateStrip(int activePixels = PixelCount) {
 void sendNuvolaStatusOverMQTT() {
     // publish nuvola Light Payload
 
-    float hue = nuvolaPayload["Hue"];
+    DynamicJsonDocument MQTTPubPayload(capacity);
 
-    MQTTPubPayload["On"] = nuvolaPayload["On"];
-    MQTTPubPayload["Brightness"] = nuvolaPayload["Brightness"];
-    MQTTPubPayload["Hue"] = hue * 360;
-    MQTTPubPayload["Saturation"] = nuvolaPayload["Saturation"];
+    MQTTPubPayload["On"] = On;
+    MQTTPubPayload["Hue"] = Hue * 360;
+    MQTTPubPayload["Brightness"] = Brightness * 100;
+    MQTTPubPayload["Saturation"] = Saturation * 100;
 
     char buffer[512];
     size_t n = serializeJson(MQTTPubPayload, buffer);
-    MQTTclient.publish("outTopic", buffer, n);
+    MQTTclient.publish("lights/nuvola2/getState", buffer, n);
 }
 
 void MQTTcallback(char* topic, byte* payload, unsigned int length) {
 
+  DynamicJsonDocument MQTTSubPayload(capacity);
+
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  for (unsigned int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
+
   deserializeJson(MQTTSubPayload, payload, length);
 
-  float hue = MQTTSubPayload["Hue"];
-
-  nuvolaPayload["On"] = MQTTSubPayload["On"];
-  nuvolaPayload["Brightness"] = MQTTSubPayload["Brightness"];
-  nuvolaPayload["Hue"] = hue / 360;
-  nuvolaPayload["Saturation"] = MQTTSubPayload["Saturation"];
+  if (MQTTSubPayload.containsKey("On")) {
+    On = MQTTSubPayload["On"];
+    if (On && !Brightness) {
+      Brightness = 1;
+    }
+  }
+  if (MQTTSubPayload.containsKey("Hue")) {
+    Hue = MQTTSubPayload["Hue"];
+    Hue /= 360;
+  }
+  if (MQTTSubPayload.containsKey("Brightness")) {
+    Brightness = MQTTSubPayload["Brightness"];
+    Brightness /= 100;
+  }
+  if (MQTTSubPayload.containsKey("Saturation")) {
+    Saturation = MQTTSubPayload["Saturation"];
+    Saturation /= 100;
+  }
 
   activateStrip();
 }
@@ -108,13 +129,12 @@ boolean reconnect() {
   if (MQTTclient.connect("Nuvola")) {
 
     Serial.println("MQTT is connected...");
-    MQTTclient.subscribe("inTopic");
+    MQTTclient.subscribe("lights/nuvola2/setState");
 
-    // publish nuvola Light Payload
-    char buffer[512];
-    size_t n = serializeJson(nuvolaPayload, buffer);
-    MQTTclient.publish("outTopic", buffer, n);
+    sendNuvolaStatusOverMQTT();
+
   }
+
   return MQTTclient.connected();
 }
 
@@ -126,16 +146,15 @@ void setup() {
     while (!Serial); // wait for serial attach
 
     // init strip obj
-    nuvolaPayload["On"] = false;
-    nuvolaPayload["Brightness"] = 0;
-    nuvolaPayload["Hue"] = 0;
-    nuvolaPayload["Saturation"] = 0;
+    On = false;
+    Brightness = 0;
+    Hue = 0;
+    Saturation = 0;
 
     Serial.flush();
 
     Serial.println("Initializing... Nuvola");
     Serial.println();
-    serializeJson(nuvolaPayload, Serial);
 
     WiFiManager wifiManager;
 
@@ -166,18 +185,21 @@ void loop() {
 
   if (!MQTTclient.connected()) {
 
-    Serial.println("MQTT not connected...");
     currentMQTTmillis = millis();
 
     if (currentMQTTmillis - startMQTTmillis > MQTTdelay) {
 
+      Serial.println("MQTT not connected...");
+      Serial.println("reconnecting...");
       startMQTTmillis = currentMQTTmillis;
+
       // Attempt to reconnect
       if (reconnect()) {
         startMQTTmillis = 0;
       }
     }
   } else {
+
     // Client connected
     MQTTclient.loop();
   }
@@ -210,54 +232,52 @@ void loop() {
 
       longPressActivePixels += 2;
 
-      nuvolaPayload["On"] = true;
-      nuvolaPayload["Brightness"] = 1;
-      nuvolaPayload["Hue"] = 1;
-      nuvolaPayload["Saturation"] = 1;
+      On = true;
+      Brightness = 1;
+      Hue = 0;
+      Saturation = 0;
 
     } else {
 
       longPressActivePixels = 0;
 
-      nuvolaPayload["On"] = false;
-      nuvolaPayload["Brightness"] = 0;
-      nuvolaPayload["Hue"] = 0;
-      nuvolaPayload["Saturation"] = 0;
+      On = false;
+      Brightness = 0;
+      Hue = 0;
+      Saturation = 0;
 
     }
 
     Serial.print("Activated ");
     Serial.println(longPressActivePixels);
 
-    activateStrip(longPressActivePixels);
+    activateStrip();
     sendNuvolaStatusOverMQTT();
 
-    startLongPressMillis = currentLongPressMillis;  //IMPORTANT to save the start time of the current LED state.
+    startLongPressMillis = currentLongPressMillis;
   }
 
   if ( multiresponseButton.singleClick() ) {
 
     Serial.println("Click");
 
-    longPressActivePixels = 0;
+    if (On) {
 
-    if (nuvolaPayload["On"]) {
+      On = false;
+      Brightness = 0;
+      Hue = 0;
+      Saturation = 0;
 
-      nuvolaPayload["On"] = false;
-      nuvolaPayload["Brightness"] = 0;
-      nuvolaPayload["Hue"] = 0;
-      nuvolaPayload["Saturation"] = 0;
-
-      activateStrip(10);
+      activateStrip();
 
     } else {
 
-      nuvolaPayload["On"] = true;
-      nuvolaPayload["Brightness"] = 1;
-      nuvolaPayload["Hue"] = 0.5;
-      nuvolaPayload["Saturation"] = 1;
+      On = true;
+      Brightness = 1;
+      Hue = 0;
+      Saturation = 0;
 
-      activateStrip(10);
+      activateStrip();
     }
 
     sendNuvolaStatusOverMQTT();
