@@ -7,6 +7,9 @@
 #include <WiFiManager.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <Adafruit_Sensor.h>
+#include <DHT.h>
+#include <DHT_U.h>
 
 // millis
 unsigned long startLongPressMillis;
@@ -17,6 +20,10 @@ unsigned long startMQTTmillis;
 unsigned long currentMQTTmillis;
 const unsigned long MQTTdelay = 5000;
 
+unsigned long startTEMPmillis;
+unsigned long currentTEMPmillis;
+const unsigned long TEMPdelay = 60000;
+
 // bulb characteristics
 
 bool On;
@@ -26,7 +33,7 @@ float Saturation;
 
 // multi response button
 const byte multiresponseButtonpin = D2;
-int longPressActivePixels = 0;
+int longPressActivePixels = 10;
 bool pushed;
 
 // payload { On: false, Brightness: 0, Hue: 0, Saturation: 0 }
@@ -43,6 +50,13 @@ const uint8_t PixelPin = 20;  // make sure to set this to the correct pin, ignor
 NeoPixelBus<NeoGrbFeature, NeoEsp8266Dma800KbpsMethod> strip(PixelCount, PixelPin);
 
 HsbColor hsbBlack(0, 0, 0);
+
+// DHT
+
+#define DHTPIN D1 // Pin which is connected to the DHT sensor.
+#define DHTTYPE DHT11 // DHT 11
+
+DHT_Unified dht(DHTPIN, DHTTYPE);
 
 // MQTT
 WiFiClient espClient;
@@ -85,8 +99,9 @@ void sendNuvolaStatusOverMQTT() {
 
     char buffer[512];
     size_t n = serializeJson(MQTTPubPayload, buffer);
-    MQTTclient.publish("lights/nuvola2/getState", buffer, n);
+    MQTTclient.publish("lights/nuvola/getState", buffer, n);
 }
+
 
 void MQTTcallback(char* topic, byte* payload, unsigned int length) {
 
@@ -129,7 +144,7 @@ boolean reconnect() {
   if (MQTTclient.connect("Nuvola")) {
 
     Serial.println("MQTT is connected...");
-    MQTTclient.subscribe("lights/nuvola2/setState");
+    MQTTclient.subscribe("lights/nuvola/setState");
 
     sendNuvolaStatusOverMQTT();
 
@@ -144,6 +159,9 @@ void setup() {
 
     Serial.begin(115200);
     while (!Serial); // wait for serial attach
+
+    dht.begin();
+    Serial.println("Initializing DHT");
 
     // init strip obj
     On = false;
@@ -182,6 +200,44 @@ void setup() {
 }
 
 void loop() {
+
+    currentTEMPmillis = millis();
+
+    if (currentTEMPmillis - startTEMPmillis > TEMPdelay) {
+
+      DynamicJsonDocument MQTTPubSensorPayload(capacity);
+
+      // Get temperature event and print its value.
+      sensors_event_t event;
+      dht.temperature().getEvent(&event);
+      if (isnan(event.temperature)) {
+        Serial.println("Error reading temperature!");
+      }
+      else {
+        Serial.print("Temperature: ");
+        Serial.print(event.temperature);
+        Serial.println(" *C");
+        MQTTPubSensorPayload["Temperature"] = event.temperature;
+      }
+      // Get humidity event and print its value.
+      dht.humidity().getEvent(&event);
+      if (isnan(event.relative_humidity)) {
+        Serial.println("Error reading humidity!");
+      }
+      else {
+        Serial.print("Humidity: ");
+        Serial.print(event.relative_humidity);
+        Serial.println("%");
+        MQTTPubSensorPayload["Humidity"] = event.relative_humidity;
+      }
+
+      char buffer[512];
+      size_t n = serializeJson(MQTTPubSensorPayload, buffer);
+      MQTTclient.publish("sensors/nuvola/getState", buffer, n);
+
+      startTEMPmillis = currentTEMPmillis;
+
+    }
 
   if (!MQTTclient.connected()) {
 
