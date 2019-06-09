@@ -68,6 +68,8 @@ void activateStrip() {
 
   Serial.println();
   Serial.println("Nuvola set new values");
+  Serial.print("Active Pixels ");
+  Serial.println(longPressActivePixels);
   Serial.print("On ");
   Serial.println(On);
   Serial.print("Brightness ");
@@ -284,7 +286,7 @@ void loop() {
   if (currentLongPressMillis - startLongPressMillis >= longPressDelay && pushed) {
 
 
-    if (longPressActivePixels <= PixelCount) {
+    if (longPressActivePixels <= PixelCount - 2) {
 
       longPressActivePixels += 2;
 
@@ -327,6 +329,8 @@ void loop() {
       activateStrip();
 
     } else {
+
+      if (longPressActivePixels == 0) longPressActivePixels = 10;
 
       On = true;
       Brightness = 1;
