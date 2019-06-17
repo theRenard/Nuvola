@@ -10,6 +10,8 @@
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
+#include <Fsm.h>
+
 
 // millis
 unsigned long startLongPressMillis;
@@ -157,12 +159,68 @@ boolean reconnect() {
 
 Switch multiresponseButton = Switch(multiresponseButtonpin);
 
+// sound detection FSM
+
+const byte soundDetectorSensor = D5;
+int soundDetectedVal;
+int SOUND = 1;
+
+void sendNuvolaMotionDetectionStatusOverMQTT(bool state) {
+    // publish nuvola Motion Detection Payload
+
+    DynamicJsonDocument MQTTPubPayload(capacity);
+
+    MQTTPubPayload["MotionDetected"] = state;
+
+    char buffer[32];
+    size_t n = serializeJson(MQTTPubPayload, buffer);
+    MQTTclient.publish("sensors/nuvola/soundSensor/getState", buffer, n);
+}
+
+void initialStateEnter() {
+  Serial.println("initialStateEnter");
+}
+
+void waitStateEnter() {
+  Serial.println("waitStateEnter");
+}
+
+void soundDetectedStateEnter() {
+  Serial.println("soundDetectedStateEnter");
+}
+
+void motionDetectedStateEnter() {
+  sendNuvolaMotionDetectionStatusOverMQTT(true);
+  Serial.println("motionDetectedStateEnter");
+}
+
+void finalStateEnter() {
+  sendNuvolaMotionDetectionStatusOverMQTT(false);
+  Serial.println("finalStateEnter");
+}
+
+void onStateExit() {
+}
+
+State initialState(&initialStateEnter, &onStateExit, NULL);
+State waitState(&waitStateEnter, &onStateExit, NULL);
+State soundDetectedState(&soundDetectedStateEnter, &onStateExit, NULL);
+State motionDetectedState(&motionDetectedStateEnter, &onStateExit, NULL);
+State finalState(&finalStateEnter, &onStateExit, NULL);
+
+Fsm fsm(&initialState);
+
+
+
 void setup() {
 
     Serial.begin(115200);
     while (!Serial); // wait for serial attach
 
     dht.begin();
+    Serial.println();
+    Serial.println();
+    Serial.println();
     Serial.println("Initializing DHT");
 
     // init strip obj
@@ -194,6 +252,16 @@ void setup() {
     // this resets all the neopixels to an off state
     strip.Begin();
     strip.Show();
+
+    // add fsm transitions
+    fsm.add_transition(&initialState, &waitState, SOUND, NULL);
+    fsm.add_timed_transition(&waitState, &soundDetectedState, 10000, NULL);
+    fsm.add_transition(&soundDetectedState, &motionDetectedState, SOUND, NULL);
+    fsm.add_timed_transition(&soundDetectedState, &initialState, 5000, NULL);
+    fsm.add_transition(&motionDetectedState, &motionDetectedState, SOUND, NULL);
+    fsm.add_timed_transition(&motionDetectedState, &finalState, 5000, NULL);
+    fsm.add_transition(&finalState, &motionDetectedState, SOUND, NULL);
+    fsm.add_timed_transition(&finalState, &initialState, 5000, NULL);
 
     Serial.println();
     Serial.println("Running...");
@@ -343,5 +411,12 @@ void loop() {
     sendNuvolaStatusOverMQTT();
 
   }
+
+  soundDetectedVal = digitalRead(soundDetectorSensor);
+
+  if (soundDetectedVal == 0) fsm.trigger(SOUND);
+
+  fsm.run_machine();
+
 }
 
