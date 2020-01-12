@@ -1,6 +1,15 @@
 {
   "terminal.integrated.env.osx": {
-    "PATH": "/Users/daniele/.platformio/penv/bin:/Users/daniele/.platformio/penv:/Users/daniele/.nvm/versions/node/v10.15.0/bin:/Users/daniele/bin:/usr/local/bin:/opt/local/bin:/Library/Frameworks/Python.framework/Versions/3.6/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/opt/X11/bin:/Applications/Postgres.app/Contents/Versions/latest/bin",
+    "PATH": "/Users/daniele/.platformio/penv/bin:/Users/daniele/.platformio/penv:/Library/Frameworks/Python.framework/Versions/3.7/bin:/Users/daniele/.nvm/versions/node/v10.15.0/bin:/Users/daniele/bin:/usr/local/bin:/opt/local/bin:/Library/Frameworks/Python.framework/Versions/3.7/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Library/Apple/usr/bin:/Library/Apple/bin:/opt/X11/bin:/Applications/Postgres.app/Contents/Versions/latest/bin",
     "PLATFORMIO_CALLER": "vscode"
-  }
+  },
+  "workbench.colorCustomizations": {
+    "activityBar.background": "#a160de",
+    "activityBar.activeBorder": "#e4b17b",
+    "activityBar.foreground": "#15202b",
+    "activityBar.inactiveForeground": "#15202b99",
+    "activityBarBadge.background": "#e4b17b",
+    "activityBarBadge.foreground": "#15202b"
+  },
+  "peacock.color": "#8836d5"
 }
